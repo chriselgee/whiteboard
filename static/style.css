@@ -1,0 +1,9 @@
+/* Basic styling for Whiteboard game */
+body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+h1 { color: #333; text-align: center; }
+#lobby, #game { max-width: 400px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
+input[type=text] { width: 80%; padding: 8px; margin: 8px 0; border-radius: 4px; border: 1px solid #bbb; }
+button { padding: 8px 16px; border: none; background: #4caf50; color: #fff; border-radius: 4px; cursor: pointer; margin: 8px 0; }
+button:hover { background: #388e3c; }
+ul { padding-left: 20px; }
+#game_status { margin-top: 16px; color: #888; }
