@@ -14,8 +14,19 @@ games = {}
 games_lock = Lock()
 
 ENGLISH_WORDS = [
-    "honey", "apple", "river", "cloud", "star", "mouse", "car", "tree", "book", "light"
+    "alarm","anchor","apple","armor","balloon","battery","blanket","breeze",
+    "broom","button","candy","castle","cave","chalk","cheese","clock","cloud",
+    "comet","crown","crystal","desert","dice","dragon","echo","feather","fence",
+    "fire","flame","forest","ghost","glass","gold","guitar","hammer","helmet",
+    "honey","ice","ink","island","jelly","jungle","kite","ladder","lantern",
+    "leaf","light","locket","magic","magnet","map","marble","mask","mirror",
+    "monster","moon","moonlight","nest","ninja","owl","paint","panther",
+    "pirate","potion","puzzle","rainbow","river","robot","rocket","sand",
+    "scarf","shadow","shark","shell","smoke","snow","snowflake","spider",
+    "star","storm","sword","tent","thunder","ticket","tornado","train",
+    "treasure","trunk","tunnel","volcano","web","whale","whisper","zipper"
 ]
+
 
 # Helper: generate a unique game code
 def generate_game_code():
