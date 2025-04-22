@@ -1,6 +1,7 @@
 // Handles lobby creation/joining and game state transitions
 let playerId = null;
 let gameCode = null;
+let waitingForNextRound = false; // Track if player is waiting for next round
 
 function createGame() {
     const name = document.getElementById('name').value;
@@ -92,11 +93,16 @@ function showScoreboard(scores, answers, names) {
         <ul>${scoreList}</ul>
         <button onclick="readyForNextRound()">Ready for Next Round</button>
         <div id="game_status"></div>`;
+    // If player is waiting, keep the message visible
+    if (waitingForNextRound) {
+        document.getElementById('game_status').innerText = 'Waiting for others...';
+    }
     // Keep polling in scoring state so all players see the scoreboard
     setTimeout(pollState, 2000);
 }
 
 function readyForNextRound() {
+    waitingForNextRound = true;
     fetch('/next', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -120,6 +126,7 @@ function showWinner(winner, players) {
 function pollState() {
     fetch(`/state?game_code=${gameCode}`).then(r => r.json()).then(data => {
         if (data.state === 'playing' && data.current_word) {
+            waitingForNextRound = false; // Reset flag for new round
             // Check if this player has already submitted an answer
             const player = data.players[playerId];
             if (player && player.answer) {
@@ -128,6 +135,7 @@ function pollState() {
                 showGameScreen(data.current_word);
             }
         } else if (data.state === 'finished') {
+            waitingForNextRound = false; // Reset flag if game finished
             showWinner(data.winner, data.players);
         } else if (data.state === 'scoring') {
             // Show scoreboard for all players
