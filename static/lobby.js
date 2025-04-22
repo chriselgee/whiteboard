@@ -108,11 +108,11 @@ function readyForNextRound() {
     });
 }
 
-function showWinner(winner, scores) {
+function showWinner(winner, players) {
     const gameDiv = document.getElementById('game');
     let scoreList = '';
-    for (const pid in scores) {
-        scoreList += `<li>${scores[pid]} pts</li>`;
+    for (const pid in players) {
+        scoreList += `<li>${players[pid].name}: ${players[pid].score} pts</li>`;
     }
     gameDiv.innerHTML = `<h2>Winner: ${winner}</h2><ul>${scoreList}</ul><button onclick="location.reload()">Play Again</button>`;
 }
