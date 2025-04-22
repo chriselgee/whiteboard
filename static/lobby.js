@@ -48,11 +48,9 @@ function readyUp() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({game_code: gameCode, player_id: playerId})
     }).then(r => r.json()).then(data => {
-        if (data.state === 'playing') {
-            showGameScreen(data.current_word);
-        } else {
-            document.getElementById('game_status').innerText = 'Waiting for others...';
-        }
+        // Always rely on pollState to update UI
+        document.getElementById('game_status').innerText = 'Waiting for others...';
+        pollState();
     });
 }
 
@@ -72,12 +70,35 @@ function submitAnswer() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({game_code: gameCode, player_id: playerId, answer: answer})
     }).then(r => r.json()).then(data => {
-        if (data.state === 'finished') {
-            showWinner(data.winner, data.scores);
-        } else {
-            document.getElementById('game_status').innerText = 'Waiting for others...';
-            pollState();
-        }
+        // Always rely on pollState to update UI
+        document.getElementById('game_status').innerText = 'Waiting for others...';
+        pollState();
+    });
+}
+
+function showScoreboard(scores, answers, names) {
+    const gameDiv = document.getElementById('game');
+    let scoreList = '';
+    for (const pid in scores) {
+        scoreList += `<li>${names[pid]}: ${scores[pid]} pts (${answers[pid]})</li>`;
+    }
+    gameDiv.innerHTML = `<h2>Scoreboard</h2>
+        <ul>${scoreList}</ul>
+        <button onclick="readyForNextRound()">Ready for Next Round</button>
+        <div id="game_status"></div>`;
+    // Keep polling in scoring state so all players see the scoreboard
+    setTimeout(pollState, 2000);
+}
+
+function readyForNextRound() {
+    fetch('/next', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({game_code: gameCode, player_id: playerId})
+    }).then(r => r.json()).then(data => {
+        // Always rely on pollState to update UI
+        document.getElementById('game_status').innerText = 'Waiting for others...';
+        pollState();
     });
 }
 
@@ -96,6 +117,17 @@ function pollState() {
             showGameScreen(data.current_word);
         } else if (data.state === 'finished') {
             showWinner(data.winner, data.players);
+        } else if (data.state === 'scoring') {
+            // Show scoreboard for all players
+            let scores = {};
+            let answers = {};
+            let names = {};
+            for (const pid in data.players) {
+                scores[pid] = data.players[pid].score;
+                answers[pid] = data.players[pid].answer;
+                names[pid] = data.players[pid].name;
+            }
+            showScoreboard(scores, answers, names);
         } else {
             // Update player list
             let players = '';

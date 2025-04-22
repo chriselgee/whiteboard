@@ -109,13 +109,40 @@ def submit_answer():
                 game["state"] = "finished"
                 game["winner"] = game["players"][winner]["name"]
             else:
-                # Next round
-                game["state"] = "playing"
-                game["round"] += 1
-                game["current_word"] = random.choice(ENGLISH_WORDS)
+                # Move to scoring state, wait for all to ready up for next round
+                game["state"] = "scoring"
                 for p in game["players"].values():
-                    p["answer"] = None
-    return jsonify({"state": game["state"], "scores": {pid: p["score"] for pid, p in game["players"].items()}, "winner": game.get("winner")})
+                    p["ready"] = False
+    return jsonify({
+        "state": game["state"],
+        "scores": {pid: p["score"] for pid, p in game["players"].items()},
+        "winner": game.get("winner"),
+        "answers": {pid: p["answer"] for pid, p in game["players"].items()}
+    })
+
+@app.route("/next", methods=["POST"])
+def next_round():
+    data = request.json
+    code = data.get("game_code")
+    player_id = data.get("player_id")
+    with games_lock:
+        game = games.get(code)
+        if not game or player_id not in game["players"] or game["state"] != "scoring":
+            return jsonify({"error": "Invalid game or player or state"}), 400
+        game["players"][player_id]["ready"] = True
+        # If all ready, start next round
+        if all(p["ready"] for p in game["players"].values()):
+            game["state"] = "playing"
+            game["round"] += 1
+            game["current_word"] = random.choice(ENGLISH_WORDS)
+            for p in game["players"].values():
+                p["answer"] = None
+                p["ready"] = False
+    return jsonify({
+        "state": game["state"],
+        "current_word": game["current_word"],
+        "round": game["round"]
+    })
 
 @app.route("/state", methods=["GET"])
 def get_state():
@@ -128,7 +155,7 @@ def get_state():
             "state": game["state"],
             "round": game["round"],
             "current_word": game["current_word"],
-            "players": {pid: {"name": p["name"], "score": p["score"]} for pid, p in game["players"].items()},
+            "players": {pid: {"name": p["name"], "score": p["score"], "answer": p["answer"]} for pid, p in game["players"].items()},
             "winner": game.get("winner")
         })
 
