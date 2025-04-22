@@ -1,7 +1,7 @@
 /* Whiteboard/classroom theme */
 body {
-    font-family: 'Permanent Marker', 'Comic Sans MS', cursive, Arial, sans-serif;
-    background: #e6e6e6 url('https://www.transparenttextures.com/patterns/white-wall-3.png');
+    font-family: 'Segoe UI', 'Arial', 'Liberation Sans', 'Helvetica Neue', sans-serif;
+    background: #e6e6e6;
     margin: 0;
     padding: 0;
 }
@@ -64,14 +64,14 @@ button:hover {
 ul {
     padding-left: 24px;
     font-size: 1.1em;
-    font-family: 'Permanent Marker', 'Comic Sans MS', cursive, Arial, sans-serif;
+    font-family: inherit;
     color: #2d2d2d;
 }
 #game_status {
     margin-top: 18px;
     color: #1976d2;
     font-size: 1.1em;
-    font-family: 'Permanent Marker', 'Comic Sans MS', cursive, Arial, sans-serif;
+    font-family: inherit;
 }
 /* Marker color accents */
 #lobby h2, #game h2 {
@@ -81,6 +81,6 @@ ul {
 }
 #lobby_status {
     color: #d84315;
-    font-family: 'Permanent Marker', 'Comic Sans MS', cursive, Arial, sans-serif;
+    font-family: inherit;
     margin-top: 10px;
 }
