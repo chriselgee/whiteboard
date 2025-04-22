@@ -61,6 +61,13 @@ function showGameScreen(word) {
         <input type="text" id="answer" placeholder="Your word">
         <button onclick="submitAnswer()">Submit</button>
         <div id="game_status"></div>`;
+    // Add Enter key support
+    const answerInput = document.getElementById('answer');
+    answerInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            submitAnswer();
+        }
+    });
 }
 
 function showWaitingScreen(answer) {
