@@ -62,6 +62,13 @@ function showGameScreen(word) {
         <div id="game_status"></div>`;
 }
 
+function showWaitingScreen(answer) {
+    const gameDiv = document.getElementById('game');
+    gameDiv.innerHTML = `<h2>Your answer: ${answer}</h2><div id="game_status">Waiting for other players to submit...</div>`;
+    // Poll more frequently while waiting
+    setTimeout(pollState, 1000);
+}
+
 function submitAnswer() {
     const answer = document.getElementById('answer').value;
     if (!answer) return alert('Enter a word');
@@ -70,8 +77,7 @@ function submitAnswer() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({game_code: gameCode, player_id: playerId, answer: answer})
     }).then(r => r.json()).then(data => {
-        // Always rely on pollState to update UI
-        document.getElementById('game_status').innerText = 'Waiting for others...';
+        // Immediately poll for state update after submitting
         pollState();
     });
 }
@@ -114,7 +120,13 @@ function showWinner(winner, scores) {
 function pollState() {
     fetch(`/state?game_code=${gameCode}`).then(r => r.json()).then(data => {
         if (data.state === 'playing' && data.current_word) {
-            showGameScreen(data.current_word);
+            // Check if this player has already submitted an answer
+            const player = data.players[playerId];
+            if (player && player.answer) {
+                showWaitingScreen(player.answer);
+            } else {
+                showGameScreen(data.current_word);
+            }
         } else if (data.state === 'finished') {
             showWinner(data.winner, data.players);
         } else if (data.state === 'scoring') {
