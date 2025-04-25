@@ -4,6 +4,7 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 from datetime import datetime
 import uuid
+import random
 # import os
 
 # Initialize Firestore client
@@ -23,6 +24,7 @@ def create_game(code):
         "round": 0,
         "current_word": None,
         "state": "lobby",
+        "used_words": [],
         "created_at": firestore.SERVER_TIMESTAMP
     }
     games_ref.document(code).set(game_data)
@@ -103,6 +105,31 @@ def set_game_winner(code, winner):
     games_ref.document(code).update({
         "winner": winner
     })
+
+# Select a fresh word that hasn't been used yet in this game
+def select_fresh_word(code, word_list):
+    """Select a word that hasn't been used yet in this game"""
+    game = get_game(code)
+    used_words = game.get("used_words", [])
+    
+    # If all words have been used, reset the list
+    if len(used_words) >= len(word_list) * 0.8:  # Reset when 80% of words used
+        update_game(code, {"used_words": []})
+        used_words = []
+    
+    # Find words that haven't been used yet
+    available_words = [word for word in word_list if word not in used_words]
+    
+    # If all words have been used (shouldn't happen with the reset above), use any word
+    if not available_words:
+        selected_word = random.choice(word_list)
+    else:
+        selected_word = random.choice(available_words)
+    
+    # Add the selected word to the used words list
+    update_game(code, {"used_words": firestore.ArrayUnion([selected_word])})
+    
+    return selected_word
 
 # Transaction for updating scores after a round
 def update_scores_after_round(code, score_updates):

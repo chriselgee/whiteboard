@@ -5,6 +5,7 @@ import uuid
 from functools import wraps
 import os
 import random
+from google.cloud import firestore
 
 app = Flask(__name__)
 
@@ -77,7 +78,7 @@ def player_ready():
                 break
         
         if len(game["players"]) >= 3 and all_ready:
-            current_word = random.choice(ENGLISH_WORDS)
+            current_word = db_funcs.select_fresh_word(code, ENGLISH_WORDS)
             db_funcs.set_game_state(code, "playing")
             db_funcs.update_game_round(code, game["round"] + 1)
             db_funcs.set_current_word(code, current_word)
@@ -184,7 +185,7 @@ def next_round():
     
     # If all ready, start next round
     if all_ready:
-        current_word = random.choice(ENGLISH_WORDS)
+        current_word = db_funcs.select_fresh_word(code, ENGLISH_WORDS)
         db_funcs.set_game_state(code, "playing")
         db_funcs.update_game_round(code, game["round"] + 1)
         db_funcs.set_current_word(code, current_word)
