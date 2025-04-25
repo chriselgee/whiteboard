@@ -4,14 +4,9 @@ import db_funcs
 import uuid
 from functools import wraps
 import os
-from threading import Lock
 import random
 
 app = Flask(__name__)
-
-# In-memory game state (replace with db_funcs for persistence)
-games = {}
-games_lock = Lock()
 
 ENGLISH_WORDS = [
     "alarm","anchor","apple","armor","balloon","battery","blanket","breeze",
@@ -39,14 +34,8 @@ def index():
 
 @app.route("/create", methods=["POST"])
 def create_game():
-    with games_lock:
-        code = generate_game_code()
-        games[code] = {
-            "players": {},  # player_id: {name, score, ready, answer}
-            "round": 0,
-            "current_word": None,
-            "state": "lobby",  # lobby, playing, scoring, finished
-        }
+    code = generate_game_code()
+    db_funcs.create_game(code)
     return jsonify({"game_code": code})
 
 @app.route("/join", methods=["POST"])
@@ -56,12 +45,15 @@ def join_game():
     name = data.get("name")
     if not code or not name:
         return jsonify({"error": "Missing game code or name"}), 400
-    with games_lock:
-        game = games.get(code)
-        if not game:
-            return jsonify({"error": "Game not found"}), 404
-        player_id = str(uuid.uuid4())
-        game["players"][player_id] = {"name": name, "score": 0, "ready": False, "answer": None}
+    
+    game = db_funcs.get_game(code)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+    
+    player_id = str(uuid.uuid4())
+    player_data = {"name": name, "score": 0, "ready": False, "answer": None}
+    db_funcs.add_player(code, player_id, player_data)
+    
     return jsonify({"player_id": player_id})
 
 @app.route("/ready", methods=["POST"])
@@ -69,19 +61,33 @@ def player_ready():
     data = request.json
     code = data.get("game_code")
     player_id = data.get("player_id")
-    with games_lock:
-        game = games.get(code)
-        if not game or player_id not in game["players"]:
-            return jsonify({"error": "Invalid game or player"}), 400
-        game["players"][player_id]["ready"] = True
-        # Start game if all ready and >=3 players
-        if game["state"] == "lobby":
-            if len(game["players"]) >= 3 and all(p["ready"] for p in game["players"].values()):
-                game["state"] = "playing"
-                game["round"] += 1
-                game["current_word"] = random.choice(ENGLISH_WORDS)
-                for p in game["players"].values():
-                    p["answer"] = None
+    
+    game = db_funcs.get_game(code)
+    if not game or player_id not in game["players"]:
+        return jsonify({"error": "Invalid game or player"}), 400
+    
+    db_funcs.set_player_ready(code, player_id, True)
+    
+    # Start game if all ready and >=3 players
+    if game["state"] == "lobby":
+        all_ready = True
+        for p_id, player in game["players"].items():
+            if not player["ready"]:
+                all_ready = False
+                break
+        
+        if len(game["players"]) >= 3 and all_ready:
+            current_word = random.choice(ENGLISH_WORDS)
+            db_funcs.set_game_state(code, "playing")
+            db_funcs.update_game_round(code, game["round"] + 1)
+            db_funcs.set_current_word(code, current_word)
+            
+            # Reset player answers
+            for p_id in game["players"]:
+                db_funcs.update_player(code, p_id, {**game["players"][p_id], "answer": None})
+            
+            game = db_funcs.get_game(code)  # Refresh game state
+    
     return jsonify({"state": game["state"], "current_word": game["current_word"]})
 
 @app.route("/submit", methods=["POST"])
@@ -90,40 +96,65 @@ def submit_answer():
     code = data.get("game_code")
     player_id = data.get("player_id")
     answer = data.get("answer")
-    with games_lock:
-        game = games.get(code)
-        if not game or player_id not in game["players"] or game["state"] != "playing":
-            return jsonify({"error": "Invalid game or player or state"}), 400
-        game["players"][player_id]["answer"] = answer.strip().lower()
-        # Check if all answered
-        if all(p["answer"] for p in game["players"].values()):
-            # Scoring
-            answers = [p["answer"] for p in game["players"].values()]
-            score_map = {}
-            for ans in set(answers):
-                count = answers.count(ans)
-                if count == 2:
-                    pts = 3
-                elif count > 2:
-                    pts = 1
-                else:
-                    pts = 0
-                score_map[ans] = pts
-            for p in game["players"].values():
-                p["score"] += score_map[p["answer"]]
-            # Check for winner
-            winner = None
-            for pid, p in game["players"].items():
-                if p["score"] >= 20:
-                    winner = pid
-            if winner:
-                game["state"] = "finished"
-                game["winner"] = game["players"][winner]["name"]
+    
+    game = db_funcs.get_game(code)
+    if not game or player_id not in game["players"] or game["state"] != "playing":
+        return jsonify({"error": "Invalid game or player or state"}), 400
+    
+    # Submit player's answer
+    db_funcs.set_player_answer(code, player_id, answer.strip().lower())
+    
+    # Re-fetch game to check if all have answered
+    game = db_funcs.get_game(code)
+    all_answered = True
+    for p_id, player in game["players"].items():
+        if not player["answer"]:
+            all_answered = False
+            break
+    
+    if all_answered:
+        # Scoring
+        answers = [p["answer"] for p in game["players"].values()]
+        score_map = {}
+        for ans in set(answers):
+            count = answers.count(ans)
+            if count == 2:
+                pts = 3
+            elif count > 2:
+                pts = 1
             else:
-                # Move to scoring state, wait for all to ready up for next round
-                game["state"] = "scoring"
-                for p in game["players"].values():
-                    p["ready"] = False
+                pts = 0
+            score_map[ans] = pts
+        
+        # Update each player's score
+        score_updates = {}
+        for p_id, player in game["players"].items():
+            player_answer = player["answer"]
+            score_delta = score_map[player_answer]
+            score_updates[p_id] = score_delta
+        
+        # Update scores in a transaction
+        db_funcs.update_scores_after_round(code, score_updates)
+        
+        # Check for winner
+        game = db_funcs.get_game(code)  # Get updated game state
+        winner = None
+        for pid, p in game["players"].items():
+            if p["score"] >= 20:
+                winner = pid
+        
+        if winner:
+            db_funcs.set_game_state(code, "finished")
+            db_funcs.set_game_winner(code, game["players"][winner]["name"])
+        else:
+            # Move to scoring state, reset ready flags
+            db_funcs.set_game_state(code, "scoring")
+            for p_id in game["players"]:
+                db_funcs.set_player_ready(code, p_id, False)
+        
+        # Get final game state after updates
+        game = db_funcs.get_game(code)
+    
     return jsonify({
         "state": game["state"],
         "scores": {pid: p["score"] for pid, p in game["players"].items()},
@@ -136,19 +167,35 @@ def next_round():
     data = request.json
     code = data.get("game_code")
     player_id = data.get("player_id")
-    with games_lock:
-        game = games.get(code)
-        if not game or player_id not in game["players"] or game["state"] != "scoring":
-            return jsonify({"error": "Invalid game or player or state"}), 400
-        game["players"][player_id]["ready"] = True
-        # If all ready, start next round
-        if all(p["ready"] for p in game["players"].values()):
-            game["state"] = "playing"
-            game["round"] += 1
-            game["current_word"] = random.choice(ENGLISH_WORDS)
-            for p in game["players"].values():
-                p["answer"] = None
-                p["ready"] = False
+    
+    game = db_funcs.get_game(code)
+    if not game or player_id not in game["players"] or game["state"] != "scoring":
+        return jsonify({"error": "Invalid game or player or state"}), 400
+    
+    db_funcs.set_player_ready(code, player_id, True)
+    
+    # Re-fetch game to check if all players are ready
+    game = db_funcs.get_game(code)
+    all_ready = True
+    for p_id, player in game["players"].items():
+        if not player["ready"]:
+            all_ready = False
+            break
+    
+    # If all ready, start next round
+    if all_ready:
+        current_word = random.choice(ENGLISH_WORDS)
+        db_funcs.set_game_state(code, "playing")
+        db_funcs.update_game_round(code, game["round"] + 1)
+        db_funcs.set_current_word(code, current_word)
+        
+        # Reset player answers and ready status
+        for p_id in game["players"]:
+            db_funcs.update_player(code, p_id, {**game["players"][p_id], "answer": None, "ready": False})
+        
+        # Get updated game state
+        game = db_funcs.get_game(code)
+    
     return jsonify({
         "state": game["state"],
         "current_word": game["current_word"],
@@ -158,17 +205,17 @@ def next_round():
 @app.route("/state", methods=["GET"])
 def get_state():
     code = request.args.get("game_code")
-    with games_lock:
-        game = games.get(code)
-        if not game:
-            return jsonify({"error": "Game not found"}), 404
-        return jsonify({
-            "state": game["state"],
-            "round": game["round"],
-            "current_word": game["current_word"],
-            "players": {pid: {"name": p["name"], "score": p["score"], "answer": p["answer"]} for pid, p in game["players"].items()},
-            "winner": game.get("winner")
-        })
+    game = db_funcs.get_game(code)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+    
+    return jsonify({
+        "state": game["state"],
+        "round": game["round"],
+        "current_word": game["current_word"],
+        "players": {pid: {"name": p["name"], "score": p["score"], "answer": p["answer"]} for pid, p in game["players"].items()},
+        "winner": game.get("winner")
+    })
 
 # Static and template serving
 @app.route('/static/<path:path>')
